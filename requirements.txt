@@ -8,3 +8,4 @@ MarkupSafe
 PyJWT
 SQLAlchemy
 Werkzeug
+Flask-RestPlus
