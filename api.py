@@ -23,56 +23,14 @@ auth = HTTPBasicAuth()
 
 
 
-class Off(db.Model):
-    __tablename__ = 'Off'
-    id_off = db.Column(db.Integer, primary_key=True)
-    offname = db.Column(db.String(32), index=True)
-    km = db.Column(db.Integer)
-    meetingPoint = db.relationship('gpxPoint', backref='off', lazy=True)
-    endPoint = db.relationship('gpxPoint', backref='off', lazy=True)
-    loop = db.Column(db.Boolean)
-    owner = db.relationship('User', backref='off', lazy=True)
-    gpx_url = db.Column(db.String(255))
-    dplus = db.Column(db.Integer)
-    after = db.Column(db.Boolean)
-    estimateTime = db.Column(db.Float)
-    detail = db.Column(db.String(255))
-
-class Participant(db.Model):
-    __tablename__ = 'Participant'
-    id_participant = db.Column(db.Integer, primary_key=True)
-    off = db.relationship('Off', backref='participant', lazy=True)
-    runner = db.relationship('User', backref='participant', lazy=True)
-    ridesharingFrom = db.relationship('gpxPoint', backref='participant', lazy=True)
-    mark = db.Column(db.Integer)
-    review = db.Column(db.String(255))
 
 
 
-class offPhoto(db.Model):
-    __tablename__ = 'offPhoto'
-    id_photo = db.Column(db.Integer, primary_key=True)
-    owner = db.relationship('User', backref='offPhoto', lazy=True)
-    off = db.relationship('Off', backref='offPhoto', lazy=True)
-    photo_url = db.Column(db.String(255))
 
-class gpxPoint(db.Model):
-    __tablename__ = 'gpxPoint'
-    id_gpx = db.Column(db.Integer, primary_key=True)
-    latitude = db.Column(db.String(255))
-    longitude = db.Column(db.String(255))
-    detail = db.Column(db.String(255))
-    owner = db.relationship('User', backref='off', lazy=True)
 
-    def serialize(self):
-        """Return object data in easily serializable format"""
-        return {
-            'id_gpx': self.id_gpx,
-            'latitude':self.latitude,
-            'longitude':self.longitude,
-            'detail':self.detail,
-            'owner':self.owner.serialize()
-        }
+
+
+
 
 
 class User(db.Model):
@@ -114,6 +72,57 @@ class User(db.Model):
             return
         return User.query.get(data['id'])
 
+
+
+class gpxPoint(db.Model):
+    __tablename__ = 'gpxPoint'
+    id_gpx = db.Column(db.Integer, primary_key=True)
+    latitude = db.Column(db.String(255))
+    longitude = db.Column(db.String(255))
+    detail = db.Column(db.String(255))
+    owner = db.Column(db.Integer, db.ForeignKey('User.id'))
+
+    def serialize(self):
+        """Return object data in easily serializable format"""
+        return {
+            'id_gpx': self.id_gpx,
+            'latitude':self.latitude,
+            'longitude':self.longitude,
+            'detail':self.detail,
+            'owner':self.owner.serialize()
+        }
+
+
+class Off(db.Model):
+    __tablename__ = 'Off'
+    id_off = db.Column(db.Integer, primary_key=True)
+    offname = db.Column(db.String(32), index=True)
+    km = db.Column(db.Integer)
+    meetingPoint = db.Column(db.Integer, db.ForeignKey('gpxPoint.id_gpx'))
+    endPoint = db.Column(db.Integer, db.ForeignKey('gpxPoint.id_gpx'))
+    loop = db.Column(db.Boolean)
+    owner = db.Column(db.Integer, db.ForeignKey('User.id'))
+    gpx_url = db.Column(db.String(255))
+    dplus = db.Column(db.Integer)
+    after = db.Column(db.Boolean)
+    estimateTime = db.Column(db.Float)
+    detail = db.Column(db.String(255))
+
+class offPhoto(db.Model):
+    __tablename__ = 'offPhoto'
+    id_photo = db.Column(db.Integer, primary_key=True)
+    owner = db.Column(db.Integer, db.ForeignKey('User.id'))
+    off = db.Column(db.Integer, db.ForeignKey('Off.id_off'))
+    photo_url = db.Column(db.String(255))
+
+class Participant(db.Model):
+    __tablename__ = 'Participant'
+    id_participant = db.Column(db.Integer, primary_key=True)
+    off = db.Column(db.Integer, db.ForeignKey('Off.id_off'))
+    runner = db.Column(db.Integer, db.ForeignKey('User.id'))
+    ridesharingFrom = db.Column(db.Integer, db.ForeignKey('gpxPoint.id_gpx'))
+    mark = db.Column(db.Integer)
+    review = db.Column(db.String(255))
 
 @auth.verify_password
 def verify_password(username_or_token, password):
@@ -188,15 +197,15 @@ def new_gpx():
     latitude = request.json.get('latitude')
     longitude = request.json.get('longitude')
     detail = request.json.get('detail')
-    owner = request.json.get('id_user')
+    owner = User.query.filter_by(id=request.json.get('id_owner')).first()
 
 
-    if User.query.filter_by(owner=owner).first() is None:
+    if owner is None:
         abort(400)  # not existing user
     if latitude is None and longitude is None or detail is None:
         abort(400)
     gpx = gpxPoint()
-    gpx.owner = User.query.filter_by(id=owner).first()
+    gpx.owner = owner
     gpx.latitude = latitude
     gpx.longitude=longitude
     gpx.detail=detail
