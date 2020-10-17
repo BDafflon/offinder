@@ -24,15 +24,6 @@ auth = HTTPBasicAuth()
 
 
 
-
-
-
-
-
-
-
-
-
 class User(db.Model):
     __tablename__ = 'User'
     id = db.Column(db.Integer, primary_key=True)
@@ -41,6 +32,7 @@ class User(db.Model):
     mail = db.Column(db.String(128))
     kikourou_url = db.Column(db.String(128))
     rank =  db.Column(db.Integer)
+    genre = db.Column(db.Integer)
 
     def hash_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -107,6 +99,21 @@ class Off(db.Model):
     after = db.Column(db.Boolean)
     estimateTime = db.Column(db.Float)
     detail = db.Column(db.String(255))
+    date = db.Column(db.DateTime, nullable=False)
+    limitParticipants = db.Column(db.Integer)
+    public = db.Column(db.Boolean)
+
+class team(db.Model):
+    id_team = db.Column(db.Integer, primary_key=True)
+    teamname = db.Column(db.String(255))
+    owner = db.Column(db.Integer, db.ForeignKey('User.id'))
+
+class teamMate(db.Model):
+    id_teammate = db.Column(db.Integer, primary_key=True)
+    user = db.Column(db.Integer, db.ForeignKey('User.id'))
+    id_team = db.Column(db.Integer, db.ForeignKey('team.id_team'))
+    registration = db.Column(db.DateTime, nullable=False)
+
 
 class offPhoto(db.Model):
     __tablename__ = 'offPhoto'
@@ -114,6 +121,7 @@ class offPhoto(db.Model):
     owner = db.Column(db.Integer, db.ForeignKey('User.id'))
     off = db.Column(db.Integer, db.ForeignKey('Off.id_off'))
     photo_url = db.Column(db.String(255))
+    public = db.Column(db.Boolean)
 
 class Participant(db.Model):
     __tablename__ = 'Participant'
