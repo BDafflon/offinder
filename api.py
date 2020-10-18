@@ -7,10 +7,10 @@ from flask_httpauth import HTTPBasicAuth
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
-
 # initialization
-from helper import helper
-from helper.helper import Rank
+from helper import *
+
+from helper.helper import Rank, api_endpoint
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'the quick brown fox jumps over the lazy dog'
@@ -22,8 +22,6 @@ db = SQLAlchemy(app)
 auth = HTTPBasicAuth()
 
 
-
-
 class User(db.Model):
     __tablename__ = 'User'
     id = db.Column(db.Integer, primary_key=True)
@@ -31,7 +29,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128))
     mail = db.Column(db.String(128))
     kikourou_url = db.Column(db.String(128))
-    rank =  db.Column(db.Integer)
+    rank = db.Column(db.Integer)
     genre = db.Column(db.Integer)
 
     def hash_password(self, password):
@@ -49,10 +47,10 @@ class User(db.Model):
         """Return object data in easily serializable format"""
         return {
             'id': self.id,
-            'username':self.username,
-            'mail':self.mail,
-            'kikourou_url':self.kikourou_url,
-            'rank':self.rank
+            'username': self.username,
+            'mail': self.mail,
+            'kikourou_url': self.kikourou_url,
+            'rank': self.rank
         }
 
     @staticmethod
@@ -63,7 +61,6 @@ class User(db.Model):
         except:
             return
         return User.query.get(data['id'])
-
 
 
 class gpxPoint(db.Model):
@@ -78,10 +75,10 @@ class gpxPoint(db.Model):
         """Return object data in easily serializable format"""
         return {
             'id_gpx': self.id_gpx,
-            'latitude':self.latitude,
-            'longitude':self.longitude,
-            'detail':self.detail,
-            'owner':self.owner.serialize()
+            'latitude': self.latitude,
+            'longitude': self.longitude,
+            'detail': self.detail,
+            'owner': self.owner
         }
 
 
@@ -99,14 +96,37 @@ class Off(db.Model):
     after = db.Column(db.Boolean)
     estimateTime = db.Column(db.Float)
     detail = db.Column(db.String(255))
-    date = db.Column(db.DateTime, nullable=False)
+    date_off = db.Column(db.Integer, nullable=False)
     limitParticipants = db.Column(db.Integer)
     public = db.Column(db.Boolean)
+
+    def serialize(self):
+        """Return object data in easily serializable format"""
+        meeting = gpxPoint.query.filter_by(id_gpx=self.meetingPoint).first()
+        endP = gpxPoint.query.filter_by(id_gpx=self.endPoint).first()
+        return {
+            'offname': self.offname,
+            'km': self.km,
+             'id_endpoint': endP.serialize(),
+             'id_meetingpoint': meeting.serialize(),
+            'loop':self.loop,
+             'id_user':self.owner,
+             'gpx_url':self.gpx_url,
+             'dplus':self.dplus,
+             'after':self.after,
+             'estimateTime':self.estimateTime,
+             'detail':self.detail,
+             'public':self.public,
+             'limitParticipants':self.limitParticipants,
+             'date_off':self.date_off
+            }
+
 
 class team(db.Model):
     id_team = db.Column(db.Integer, primary_key=True)
     teamname = db.Column(db.String(255))
     owner = db.Column(db.Integer, db.ForeignKey('User.id'))
+
 
 class teamMate(db.Model):
     id_teammate = db.Column(db.Integer, primary_key=True)
@@ -123,6 +143,7 @@ class offPhoto(db.Model):
     photo_url = db.Column(db.String(255))
     public = db.Column(db.Boolean)
 
+
 class Participant(db.Model):
     __tablename__ = 'Participant'
     id_participant = db.Column(db.Integer, primary_key=True)
@@ -131,6 +152,7 @@ class Participant(db.Model):
     ridesharingFrom = db.Column(db.Integer, db.ForeignKey('gpxPoint.id_gpx'))
     mark = db.Column(db.Integer)
     review = db.Column(db.String(255))
+
 
 @auth.verify_password
 def verify_password(username_or_token, password):
@@ -145,87 +167,94 @@ def verify_password(username_or_token, password):
     return True
 
 
+# --------------------------ADMIN-------------------------------
 
-
-
-#--------------------------ADMIN-------------------------------
+#Check
 @app.route('/api/admin/users')
 @auth.login_required
 def get_users():
     users = User.query.order_by(User.username).all()
-    data=[]
+    data = []
     for u in users:
         data.append(u.serialize())
-    print(data)
-    if not users :
+    if not users:
         return jsonify({})
-    if g.user.rank != helper.ADMIN:
+    print(g.user.serialize())
+    if g.user.rank != Rank.ADMIN.value:
         abort(403)
     return jsonify(data)
 
 
+#Check
 @app.route('/api/token')
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token(600)
     return jsonify({'token': token.decode('ascii'), 'duration': 600})
 
-#--------------------------gpxPoint-------------------------------
 
-@app.route("/api/gps/owner/<int:id>",  methods=['GET'])
+# --------------------------gpxPoint-------------------------------
+#Ckeck
+@app.route("/api/gps/owner/<int:id>", methods=['GET'])
 @auth.login_required
 def get_gpx_point_by_owner(id):
-    user= User.query.filter_by(id=id).first()
+    user = User.query.filter_by(id=id).first()
     if user is None:
-        abort(400)    # not existing user
+        abort(400)  # not existing user
 
-    points = gpxPoint.query.filter_by(owner=user).all()
+    points = gpxPoint.query.filter_by(owner=id).all()
     data = []
     for u in points:
         data.append(u.serialize())
 
-    if not points :
+    if not points:
         return jsonify({})
-    if g.user.rank != helper.USER :
+    print(g.user.rank)
+    if (g.user.rank != Rank.USER.value and g.user.id != id) and g.user.rank != Rank.ADMIN.value:
         abort(403)
     return jsonify(data)
 
-@app.route("/api/gps/<int:id>",  methods=['GET'])
+
+#Check
+@app.route("/api/gps/<int:id>", methods=['GET'])
 @auth.login_required
 def get_gpx_point(id):
     point = gpxPoint.query.get(id)
-    if not point :
+    if not point:
         return jsonify({})
-    if g.user.rank != helper.USER :
-        abort(403)
-    return jsonify({'id':point.id_gpx,'latitude': point.latitude, 'longitude':point.longitude, 'detail':point.detail})
 
+    return jsonify(
+        {'id': point.id_gpx, 'latitude': point.latitude, 'longitude': point.longitude, 'detail': point.detail})
+
+#Check
 @app.route('/api/gps/registration', methods=['POST'])
+@auth.login_required
 def new_gpx():
     latitude = request.json.get('latitude')
     longitude = request.json.get('longitude')
     detail = request.json.get('detail')
     owner = User.query.filter_by(id=request.json.get('id_owner')).first()
 
-
     if owner is None:
         abort(400)  # not existing user
     if latitude is None and longitude is None or detail is None:
         abort(400)
     gpx = gpxPoint()
-    gpx.owner = owner
+    gpx.owner = owner.id
     gpx.latitude = latitude
-    gpx.longitude=longitude
-    gpx.detail=detail
+    gpx.longitude = longitude
+    gpx.detail = detail
     db.session.add(gpx)
     db.session.commit()
     return (jsonify({'gpx': gpx.id_gpx}), 201,
-            {'Location': url_for('get_gpx', id=gpx.id_gpx, _external=True)})
+            {'Location': url_for('get_gpx_point', id=gpx.id_gpx, _external=True)})
+
+    # --------------------------OFF-------------------------------
 
 
 
-    #--------------------------OFF-------------------------------
 @app.route('/api/offs/registration', methods=['POST'])
+@auth.login_required
 def new_off():
     offname = request.json.get('offname')
     km = request.json.get('km')
@@ -238,40 +267,59 @@ def new_off():
     after = request.json.get('after')
     estimateTime = request.json.get('estimateTime')
     detail = request.json.get('detail')
+    public = request.json.get('public')
+    limit = request.json.get('limitParticipants')
+    dateoff = request.json.get('dateoff')
     if offname is None or km is None or meetingPoint is None or endPoint is None or loop is None or owner is None:
         abort(400)  # missing arguments
     if User.query.filter_by(id=owner).first() is None:
-        abort(400)    # not existing user
+        abort(400)  # not existing user
+    if gpxPoint.query.filter_by(id_gpx=meetingPoint).first() is None :
+        abort(400)  # not existing user
+    if loop == 0 and gpxPoint.query.filter_by(id_gpx=endPoint).first() is None :
+        abort(400)  # not existing user
     off = Off(offname=offname)
     off.km = km
-    off.meetingPoint = gpxPoint.query.filter_by(id_gpx=meetingPoint).first()
-    off.endPoint = gpxPoint.query.filter_by(id_gpx=endPoint).first()
-    off.loop=bool(loop)
-    off.owner = User.query.filter_by(id=owner).first()
+    off.meetingPoint = meetingPoint
+    off.endPoint = endPoint
+    off.loop = bool(loop)
+    off.owner = owner
     off.gpx_url = gpx_url
     off.dplus = int(dplus)
-    off.after=bool(after)
-    off.estimateTime=float(estimateTime)
-    off.detail=detail
+    off.after = bool(after)
+    off.estimateTime = float(estimateTime)
+    off.detail = detail
+    off.public=bool(public)
+    off.limitParticipants = limit
+    off.date_off = dateoff
     db.session.add(off)
     db.session.commit()
     return (jsonify({'username': off.offname}), 201,
             {'Location': url_for('get_off', id=off.id_off, _external=True)})
 
+@app.route('/api/off/<int:id>')
+@auth.login_required
+def get_off(id):
+    off = Off.query.get(id)
+    if not off:
+        return jsonify({})
+    return jsonify(off.serialize())
 
-#--------------------------USER-------------------------------
+# --------------------------USER-------------------------------
 
 @app.route('/api/user/registration', methods=['POST'])
 def new_user():
+    print( request.args)
     username = request.json.get('username')
     password = request.json.get('password')
     mail = request.json.get('mail')
     kikourou_url = request.json.get('kikourou_url')
     rank = Rank.USER.value
     if username is None or password is None or mail is None:
-        abort(400)    # missing arguments
+        abort(400)  # missing arguments
     if User.query.filter_by(username=username).first() is not None:
-        abort(400)    # existing user
+        print("existing")
+        abort(400)  # existing user
     user = User(username=username)
     user.hash_password(password)
     user.mail = mail
@@ -282,21 +330,22 @@ def new_user():
     return (jsonify({'username': user.username}), 201,
             {'Location': url_for('get_user', id=user.id, _external=True)})
 
+
 @app.route('/api/user/<int:id>')
 @auth.login_required
 def get_user(id):
     user = User.query.get(id)
-    if not user :
+    if not user:
         return jsonify({})
-    if g.user.rank != helper.ADMIN and g.user.id != id:
+    if g.user.rank != Rank.ADMIN.value and g.user.id != id:
         abort(403)
-    return jsonify({'id':user.id,'username': user.username, 'mail':user.mail, 'kikourou':user.kikourou_url})
-
+    return jsonify(user.serialize())
 
 
 @app.route('/')
 def get_api_endpoint():
-    return jsonify(helper.api_endpoint())
+    return jsonify(api_endpoint())
+
 
 @app.route('/api/resource')
 @auth.login_required
@@ -307,4 +356,5 @@ def get_resource():
 if __name__ == '__main__':
     if not os.path.exists('db.sqlite'):
         db.create_all()
+
     app.run(debug=True)
