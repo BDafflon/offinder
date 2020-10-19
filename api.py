@@ -5,12 +5,13 @@ from flask import Flask, abort, request, jsonify, g, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_httpauth import HTTPBasicAuth
 import jwt
+from sqlalchemy import engine
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from sqlalchemy.orm import sessionmaker
 # initialization
 from helper import *
 
-from helper.helper import Rank, api_endpoint
+from helper.helper import Rank, api_endpoint, distance_between_coord
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'the quick brown fox jumps over the lazy dog'
@@ -99,12 +100,14 @@ class Off(db.Model):
     date_off = db.Column(db.Integer, nullable=False)
     limitParticipants = db.Column(db.Integer)
     public = db.Column(db.Boolean)
+    iconOff_url=db.Column(db.String(255))
 
     def serialize(self):
         """Return object data in easily serializable format"""
         meeting = gpxPoint.query.filter_by(id_gpx=self.meetingPoint).first()
         endP = gpxPoint.query.filter_by(id_gpx=self.endPoint).first()
         return {
+            'id_off':self.id_off,
             'offname': self.offname,
             'km': self.km,
              'id_endpoint': endP.serialize(),
@@ -118,7 +121,8 @@ class Off(db.Model):
              'detail':self.detail,
              'public':self.public,
              'limitParticipants':self.limitParticipants,
-             'date_off':self.date_off
+             'date_off':self.date_off,
+            'iconOff_url':self.iconOff_url
             }
 
 
@@ -233,6 +237,7 @@ def new_gpx():
     latitude = request.json.get('latitude')
     longitude = request.json.get('longitude')
     detail = request.json.get('detail')
+    print(request.json.get('id_owner'))
     owner = User.query.filter_by(id=request.json.get('id_owner')).first()
 
     if owner is None:
@@ -249,10 +254,10 @@ def new_gpx():
     return (jsonify({'gpx': gpx.id_gpx}), 201,
             {'Location': url_for('get_gpx_point', id=gpx.id_gpx, _external=True)})
 
-    # --------------------------OFF-------------------------------
+# --------------------------OFF-------------------------------
 
 
-
+#Check
 @app.route('/api/offs/registration', methods=['POST'])
 @auth.login_required
 def new_off():
@@ -270,14 +275,20 @@ def new_off():
     public = request.json.get('public')
     limit = request.json.get('limitParticipants')
     dateoff = request.json.get('dateoff')
+    iconOff_url = ""
     if offname is None or km is None or meetingPoint is None or endPoint is None or loop is None or owner is None:
+        print("1")
         abort(400)  # missing arguments
     if User.query.filter_by(id=owner).first() is None:
+        print("2")
         abort(400)  # not existing user
     if gpxPoint.query.filter_by(id_gpx=meetingPoint).first() is None :
+        print("3")
         abort(400)  # not existing user
     if loop == 0 and gpxPoint.query.filter_by(id_gpx=endPoint).first() is None :
+        print("4")
         abort(400)  # not existing user
+
     off = Off(offname=offname)
     off.km = km
     off.meetingPoint = meetingPoint
@@ -292,11 +303,13 @@ def new_off():
     off.public=bool(public)
     off.limitParticipants = limit
     off.date_off = dateoff
+    off.iconOff_url = iconOff_url
     db.session.add(off)
     db.session.commit()
     return (jsonify({'username': off.offname}), 201,
             {'Location': url_for('get_off', id=off.id_off, _external=True)})
 
+#Check
 @app.route('/api/off/<int:id>')
 @auth.login_required
 def get_off(id):
@@ -304,6 +317,88 @@ def get_off(id):
     if not off:
         return jsonify({})
     return jsonify(off.serialize())
+
+#Check
+@app.route('/api/off/date/<int:date_off>')
+@auth.login_required
+def get_off_date(date_off):
+    off = Off.query.filter(Off.date_off>=date_off)
+    if not off:
+        return jsonify({})
+    data=[]
+    for o in off:
+        data.append(o.serialize())
+
+    return jsonify(data)
+
+#Check
+@app.route('/api/off/location/<string:lat>/<string:lon>/<int:dist>')
+@auth.login_required
+def get_off_location(lat,lon,dist):
+    off = Off.query.order_by(Off.id_off).all()
+    if not off:
+        return jsonify({})
+    data = []
+    for o in off:
+        meetingP=get_gpx_point(o.meetingPoint).json
+        if meetingP is None:
+            abort(400)
+
+        distance = distance_between_coord(float(lat),float(lon),float(meetingP['latitude']),float(meetingP['longitude']))
+        if distance<dist:
+            data.append(o.serialize())
+
+    return jsonify(data)
+
+#Check
+@app.route('/api/off/owner/<int:user>')
+@auth.login_required
+def get_off_by_owner(user):
+    off = Off.query.filter_by(owner=user)
+    if not off:
+        return jsonify({})
+    data=[]
+    for o in off:
+        data.append(o.serialize())
+
+    return jsonify(data)
+
+@app.route("/api/off/participant/<int:id>")
+@auth.login_required
+def get_off_by_participant(id):
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    for p,o in session.query(Participant, Off).filter(Participant.off == Off.id_off).all():
+        print(o)
+
+
+    return jsonify({})
+
+
+# --------------------------PARTICIPANT-------------------------------
+@app.route('/api/participant/registration', methods=['POST'])
+@auth.login_required
+def new_participant():
+    off = request.json.get('off')
+    runner = request.json.get('runner')
+
+    runner_ext = User.query.filter_by(id=runner).first()
+    off_ext = Off.query.filter_by(id_off=off).first()
+
+    if runner_ext is None or off_ext is None:
+        abort(400)  # not existing user
+    if runner != g.user.id:
+        abort(403)
+
+    participant = Participant()
+    participant.off = off
+    participant.runner = runner
+
+    db.session.add(participant)
+    db.session.commit()
+    return (jsonify({'gpx': participant.id_participant}), 201,
+            {})
 
 # --------------------------USER-------------------------------
 

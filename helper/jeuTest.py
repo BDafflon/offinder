@@ -11,14 +11,14 @@ def get_random_string(length):
     return result_str
 
 def addRandomOff():
-    username = "zkdtxk"
+    username = "lhtvbm"
     password="azerty"
     offname = get_random_string(6)
     km = 25
-    meetingPoint = 1
-    endPoint = 1
+    meetingPoint = random.randint(1,11)
+    endPoint = random.randint(1,11)
     loop = 1
-    owner = 8
+    owner = random.randint(1,9)
     gpx_url = ""
     dplus = 560
     after = 1
@@ -54,11 +54,11 @@ def addRandomOff():
     print(x.text)
 
 def addRandomGPS():
-    username = "zkdtxk"
+    username = "lhtvbm"
     password = "azerty"
     url = 'http://127.0.0.1:5000/api/gps/registration'
     myobj = {
-        'id_owner':8,
+        'id_owner':random.randint(1,9),
              'latitude': str(random.randint(10000,50000)),
              'longitude': str(random.randint(10000,50000)),
              'detail' : get_random_string(50)
@@ -67,7 +67,11 @@ def addRandomGPS():
 
     print(x.text)
 
-def addRandomUser(username="runneur",password="azerty",mail="a@a.com",kikourou_url="kikourou",rank=2):
+def addRandomUser():
+    mail = get_random_string(5) + "@" + get_random_string(5) + '.' + get_random_string(3)
+    username = get_random_string(10)
+    password = "azerty"
+    kikourou_url="kikourou.fr/"+get_random_string(5)
     url = 'http://127.0.0.1:5000/api/user/registration'
     myobj = {'username': username,
              'password': password,
@@ -78,15 +82,90 @@ def addRandomUser(username="runneur",password="azerty",mail="a@a.com",kikourou_u
 
     print(x.text)
 
-def jeuTest(admin=False,user=False,off=False,gps=False):
+def addRandomParticipant():
+    off=random.randint(1,11)
+    runner = random.randint(2,20)
+
+    url = 'http://127.0.0.1:5000/api/user/registration'
+    myobj = {'off': off,
+             'runner': runner,
+             }
+    x = requests.post(url, json=myobj)
+
+    print(x.text)
+
+
+def jeuTest(admin=False,user=False,off=False,gps=False,participant=False):
     if admin:
         addRandomUser("admin","azerty","a@a.com","kik",0)
     if user:
         for i in range(0,10):
-            addRandomUser(get_random_string(6),"azerty",get_random_string(5)+"@"+get_random_string(5)+'.'+get_random_string(3))
+            addRandomUser()
     if off:
-        addRandomOff()
+        for i in range(0, 10):
+            addRandomOff()
     if gps:
-        addRandomGPS()
+        for i in range(0, 10):
+            addRandomGPS()
 
-jeuTest(False,False,False,True)
+    if participant:
+        addRandomParticipant()
+
+
+
+def getOff(id):
+    username = "lhtvbm"
+    password = "azerty"
+    PARAMS = {'id': id}
+    url = 'http://127.0.0.1:5000/api/off/'+str(id)
+    r = requests.get(url=url,json=PARAMS, auth=(username, password))
+    print(r.json())
+
+def getOffsdate(d):
+    username = "lhtvbm"
+    password = "azerty"
+    PARAMS = {'date': d}
+    url = 'http://127.0.0.1:5000/api/off/date/'+str(d)
+    r = requests.get(url=url,json=PARAMS, auth=(username, password))
+
+    for o in r.json():
+        print(o)
+
+def getOffsDist(lat,lon,dist):
+    username = "lhtvbm"
+    password = "azerty"
+    PARAMS = {'date': dist}
+    url = 'http://127.0.0.1:5000/api/off/location/'+str(lat)+'/'+str(lon)+'/'+str(dist)
+    r = requests.get(url=url,json=PARAMS, auth=(username, password))
+
+    for o in r.json():
+        print(o['id_off'])
+
+def getOffOwner(o):
+    username = "lhtvbm"
+    password = "azerty"
+    PARAMS = {'date': o}
+    url = 'http://127.0.0.1:5000/api/off/owner/'+str(o)
+    r = requests.get(url=url,json=PARAMS, auth=(username, password))
+
+    for o in r.json():
+        print(o['id_off'])
+
+def getTest(off=False,offsDate=True,offDist=False,owner=False):
+    if off:
+        getOff(1)
+
+    if offsDate:
+        getOffsdate(1592565879)
+
+    if offDist:
+        getOffsDist(45.69896679341558,4.745422049136949,50)
+
+    if owner:
+        getOffOwner(9)
+
+
+
+getTest(False,False,False,True)
+
+jeuTest(False,False,False,False)
