@@ -83,33 +83,21 @@ def addRandomUser():
     print(x.text)
 
 def addRandomParticipant():
+    username = "lhtvbm"
+    password = "azerty"
     off=random.randint(1,11)
-    runner = random.randint(2,20)
+    runner = 21
 
-    url = 'http://127.0.0.1:5000/api/user/registration'
+    url = 'http://127.0.0.1:5000/api/participant/registration'
     myobj = {'off': off,
              'runner': runner,
              }
-    x = requests.post(url, json=myobj)
+    x = requests.post(url, json=myobj,auth=(username, password))
 
     print(x.text)
 
 
-def jeuTest(admin=False,user=False,off=False,gps=False,participant=False):
-    if admin:
-        addRandomUser("admin","azerty","a@a.com","kik",0)
-    if user:
-        for i in range(0,10):
-            addRandomUser()
-    if off:
-        for i in range(0, 10):
-            addRandomOff()
-    if gps:
-        for i in range(0, 10):
-            addRandomGPS()
 
-    if participant:
-        addRandomParticipant()
 
 
 
@@ -151,7 +139,16 @@ def getOffOwner(o):
     for o in r.json():
         print(o['id_off'])
 
-def getTest(off=False,offsDate=True,offDist=False,owner=False):
+def getParticipant():
+    username = "lhtvbm"
+    password = "azerty"
+    PARAMS = {'date': 1}
+    url = 'http://127.0.0.1:5000/api/off/participant/' + str(21)
+    r = requests.get(url=url, json=PARAMS, auth=(username, password))
+    print(r)
+
+
+def getOffTest(off=False,offsDate=True,offDist=False,owner=False):
     if off:
         getOff(1)
 
@@ -164,8 +161,23 @@ def getTest(off=False,offsDate=True,offDist=False,owner=False):
     if owner:
         getOffOwner(9)
 
+def jeuTest(admin=False,user=False,off=False,gps=False,participant=True):
+    if admin:
+        addRandomUser("admin","azerty","a@a.com","kik",0)
+    if user:
+        for i in range(0,10):
+            addRandomUser()
+    if off:
+        for i in range(0, 10):
+            addRandomOff()
+    if gps:
+        for i in range(0, 10):
+            addRandomGPS()
 
+    if participant:
+        addRandomParticipant()
+getParticipant()
 
-getTest(False,False,False,True)
+getOffTest(False,False,False,False)
 
-jeuTest(False,False,False,False)
+jeuTest(False,False,False,False,True)

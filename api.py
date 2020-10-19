@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_httpauth import HTTPBasicAuth
 import jwt
 from sqlalchemy import engine
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import sessionmaker
 # initialization
@@ -30,6 +31,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128))
     mail = db.Column(db.String(128))
     kikourou_url = db.Column(db.String(128))
+    avatar = db.Column(db.String(128))
     rank = db.Column(db.Integer)
     genre = db.Column(db.Integer)
 
@@ -256,6 +258,48 @@ def new_gpx():
 
 # --------------------------OFF-------------------------------
 
+@app.route('/api/off/<int:id>', methods=['POST'])
+@auth.login_required
+def update_off_data(id):
+    off = Off.query.get(id)
+    if not off:
+        abort(404)
+    if off.owner != g.user.id and g.user.rank != Rank.ADMIN:
+        abort(403)
+
+    offname = request.json.get('offname')
+    km = request.json.get('km')
+    meetingPoint = request.json.get('id_meetingpoint')
+    endPoint = request.json.get('id_endpoint')
+    loop = request.json.get('loop')
+    owner = request.json.get('id_user')
+    gpx_url = request.json.get('gpx_url')
+    dplus = request.json.get('dplus')
+    after = request.json.get('after')
+    estimateTime = request.json.get('estimateTime')
+    detail = request.json.get('detail')
+    public = request.json.get('public')
+    limit = request.json.get('limitParticipants')
+    dateoff = request.json.get('dateoff')
+    iconOff_url = ""
+
+    off.offname = offname
+    off.km = km
+    off.meetingPoint = meetingPoint
+    off.endPoint = endPoint
+    off.loop = bool(loop)
+    off.owner = owner
+    off.gpx_url = gpx_url
+    off.dplus = int(dplus)
+    off.after = bool(after)
+    off.estimateTime = float(estimateTime)
+    off.detail = detail
+    off.public = bool(public)
+    off.limitParticipants = limit
+    off.date_off = dateoff
+    off.iconOff_url = iconOff_url
+    db.session.commit()
+    return jsonify(off.serialize())
 
 #Check
 @app.route('/api/offs/registration', methods=['POST'])
@@ -363,20 +407,27 @@ def get_off_by_owner(user):
 
     return jsonify(data)
 
+
+#check
 @app.route("/api/off/participant/<int:id>")
 @auth.login_required
 def get_off_by_participant(id):
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    runner = User.query.filter_by(id=id).first()
 
-    for p,o in session.query(Participant, Off).filter(Participant.off == Off.id_off).all():
-        print(o)
+    if id is None:
+        abort(400)
+    if id != g.user.id and g.user.rank != Rank.ADMIN:
+        abort(403)
 
+    data = []
+    for o in Off.query.join(Participant, Participant.off == Off.id_off).filter_by(runner=id):
+        data.append(o.serialize())
 
-    return jsonify({})
+    return jsonify(data)
 
 
 # --------------------------PARTICIPANT-------------------------------
+#Check
 @app.route('/api/participant/registration', methods=['POST'])
 @auth.login_required
 def new_participant():
@@ -397,7 +448,7 @@ def new_participant():
 
     db.session.add(participant)
     db.session.commit()
-    return (jsonify({'gpx': participant.id_participant}), 201,
+    return (jsonify({'participant': runner, 'off':off}), 201,
             {})
 
 # --------------------------USER-------------------------------
