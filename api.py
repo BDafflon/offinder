@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 import os
+import shutil
+import tempfile
 import time
-from flask import Flask, abort, request, jsonify, g, url_for
+from sys import path
+
+from flask import Flask, abort, request, jsonify, g, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_httpauth import HTTPBasicAuth
 import jwt
@@ -10,14 +14,18 @@ from sqlalchemy import engine
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import sessionmaker
 # initialization
+from werkzeug.utils import secure_filename
+
 from helper import *
 
-from helper.helper import Rank, api_endpoint, distance_between_coord
+from helper.helper import Rank, api_endpoint, distance_between_coord, UPLOAD_FOLDER, allowed_file, get_random_string, \
+    ImageUsed
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'the quick brown fox jumps over the lazy dog'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
 app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # extensions
 db = SQLAlchemy(app)
@@ -256,15 +264,127 @@ def new_gpx():
     return (jsonify({'gpx': gpx.id_gpx}), 201,
             {'Location': url_for('get_gpx_point', id=gpx.id_gpx, _external=True)})
 
-# --------------------------OFF-------------------------------
 
+
+# --------------------------Photo-------------------------------
+#Check
+@app.route('/api/photo', methods=['POST'])
+@auth.login_required
+def add_photo():
+    if request.method == 'POST':
+        # check if the post request has the file part
+        used = request.values.get("used")
+
+        if used is None:
+            abort(400)
+        if 'file' not in request.files:
+            flash('No file part')
+            abort(400)
+        file = request.files['file']
+        # if user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            return jsonify({"response": "no file selected"})
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+
+            dirpath = tempfile.mkdtemp()
+            file.save(os.path.join(dirpath, filename))
+
+            if os.path.isdir(os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id))):
+                _, file_extension = os.path.splitext(os.path.join(dirpath, filename))
+                print(file_extension)
+                shutil.move(os.path.join(dirpath, filename), os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id),
+                                                                          get_random_string(10) + file_extension))
+            else:
+                os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id)))
+                _, file_extension = os.path.splitext(os.path.join(dirpath, filename))
+                shutil.move(os.path.join(dirpath, filename), os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id),
+                                                                          get_random_string(10) + file_extension))
+
+            if used == ImageUsed.AVATAR.name:
+                user = User.query.get(g.user.id)
+                user.avatar = os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id),
+                                           get_random_string(10) + file_extension)
+
+                db.session.commit()
+            elif used == ImageUsed.OFF.name:
+
+                if request.values.get('off') is None or request.values.get('public') is None:
+                    abort(403)
+
+                off = int(request.values.get('off'))
+
+                participant = Participant.query.filter_by(runner=g.user.id, off=off).first()
+                if participant is not None:
+
+                    photo = offPhoto(owner=g.user.id)
+                    photo.owner = g.user.id
+                    photo.photo_url = os.path.join(app.config['UPLOAD_FOLDER'], str(g.user.id),
+                                                   get_random_string(10) + file_extension)
+                    photo.public = bool(request.values.get('public'))
+                    photo.off = int(request.values.get('off'))
+                    db.session.add(photo)
+                    db.session.commit()
+                else:
+                    shutil.rmtree(dirpath)
+                    abort(403)
+            else:
+                shutil.rmtree(dirpath)
+                abort(400)
+
+            shutil.rmtree(dirpath)
+
+            return jsonify({"response": "success", "path": get_random_string(10) + file_extension})
+    return jsonify({"response": "Error"})
+
+
+#Check
+@app.route('/api/photo/<int:id>', methods=['GET'])
+@auth.login_required
+def get_photo(id):
+
+    print(g.user.rank)
+    if g.user.rank != Rank.USER.value and g.user.rank != Rank.ADMIN.value:
+        abort(403)
+
+    offP = offPhoto.query.filter_by(id_photo=id).first()
+    if offP is None:
+        abort(400)
+
+
+    if offP.public :
+        return jsonify({"url": offP.photo_url})
+
+
+
+    participant = Participant.query.filter_by(runner=g.user.id,off=offP.off).first()
+    if participant is None:
+        abort(400)
+
+    return jsonify({"url": offP.photo_url})
+
+
+
+
+
+
+
+@app.route("/api/photo/off/<int:id>", methods=['GET'])
+@auth.login_required
+def get_photo_off(id):
+    pass
+
+# --------------------------OFF-------------------------------
+#Check
 @app.route('/api/off/<int:id>', methods=['POST'])
 @auth.login_required
 def update_off_data(id):
     off = Off.query.get(id)
     if not off:
         abort(404)
-    if off.owner != g.user.id and g.user.rank != Rank.ADMIN:
+    print(off.owner, g.user.id, g.user.rank)
+    if off.owner != g.user.id and g.user.rank != Rank.ADMIN.value:
         abort(403)
 
     offname = request.json.get('offname')

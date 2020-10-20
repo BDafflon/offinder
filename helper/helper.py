@@ -6,6 +6,14 @@ import string
 from math import radians, sin, atan2, sqrt, cos
 
 
+UPLOAD_FOLDER = 'file/upload/'
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 def distance_between_coord(lat1,lon1,lat2,lon2):
     R = 6373.0
 
@@ -28,6 +36,11 @@ def get_random_string(length):
     letters = string.ascii_lowercase
     result_str = ''.join(random.choice(letters) for i in range(length))
     return result_str
+
+class ImageUsed(Enum):
+    AVATAR=0
+    OFF=1
+
 
 class Rank(Enum):
     ADMIN=0
